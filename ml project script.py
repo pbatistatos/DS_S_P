@@ -350,10 +350,14 @@ df_to_start = df_to_start[['ID', 'Source', 'Severity', 'Start_Time',
        'final_wind_chill', 'datetime_n', 'date_n', 'time_n', 'mins_past_midn',
        'day_of_the_year']]
 
+for k in ['Amenity', 'Bump', 'Crossing',
+'Give_Way', 'Junction', 'No_Exit', 'Railway', 'Roundabout', 'Station',
+'Stop', 'Traffic_Calming', 'Traffic_Signal', 'Turning_Loop']:
+    df_to_start[k] = df_to_start[k].replace(True,1)
+    df_to_start[k] = df_to_start[k].replace(False,0)
+
+
 df_to_start.to_excel(r"C:\Users\Administrator\Desktop\Έγγραφα Μτεαπτυχιακού 2\Σημειώσεις Μεταπρυχιακού\ml\no_missing_dataset.xlsx")
-
-
-
 
 
 

@@ -30,7 +30,8 @@ from datetime import datetime
 import pytz
 from suntime import Sun, SunTimeException
 
-
+#to impute missing zipcodes
+from geopy.geocoders import Nominatim
 
 # Haversine formula to compute destination coordinates (bearing = direction of travel)
 def compute_end_coordinates(start_latit, start_long, distance, bearing):
@@ -90,36 +91,19 @@ def get_date(row):
 def get_time(row):
     return str(row['Start_Time'])[11:19]
 
-
-
-
-    
+def count_minutes_past_midnight(row):
+    return (int(str(row['time_n'])[:2])*60) + int(str(row['time_n'])[3:5])
 '''
-def calculate_day_night(row):
-    # Get location and time zone
-    longitude, latitude = row['Start_Lng'], row['Start_Lat']
-    #time_zone = row['Timezone']
-    incident_time = row['Start_Time']
+def count_days_past_eve(row):
+    return (int(str(row['date_n'])[6:8])*60) + int(str(row['date_n'])[3:5])
+    '''
+def day_of_the_year(row):
+    year = str(row['date_n'])[:4]
+    month = str(row['date_n'])[5:7]
+    day = str(row['date_n'])[8:10]
+    return datetime(int(year),int(month),int(day)).timetuple().tm_yday   
     
-    # Set time zone for conversion
-    #tz = pytz.timezone(time_zone)
-    #incident_time = tz.localize(incident_time)  # Localize time to the respective timezone
     
-    # Get the time of the sun (sunrise and sunset)
-    #sun = Sun(latitude, longitude)
-    try:
-        sunrise = sun.get_sunrise_time(incident_time.date()).astimezone(tz)
-        sunset = sun.get_sunset_time(incident_time.date()).astimezone(tz)
-        
-        # Check if the incident time is between sunrise and sunset (daytime)
-        if sunrise <= incident_time <= sunset:
-            return 1  # Day
-        else:
-            return 0  # Night
-    except SunTimeException:
-        return np.nan  # If calculation fails, return NaN
-'''
-
 start_df = pd.read_csv(r"C:\Users\Administrator\Desktop\Έγγραφα Μτεαπτυχιακού 2\Σημειώσεις Μεταπρυχιακού\ml\US_Accidents_March23.csv")
 
 '''
@@ -177,8 +161,6 @@ standardized_data = scaler.fit_transform(df_to_work[['Distance(mi)','Temperature
 standardized_df = pd.DataFrame(standardized_data, columns=df_to_work[['Distance(mi)','Temperature(F)', 'Wind_Chill(F)', 'Humidity(%)', 'Pressure(in)', 'Visibility(mi)', 'Wind_Speed(mph)', 'Precipitation(in)']].columns)
 
 matrix1 = standardized_df.corr()
-
-
 
 matrix = df_to_work[['Start_Lat', 'Start_Lng', 'Distance(mi)','Temperature(F)', 'Wind_Chill(F)', 'Humidity(%)', 'Pressure(in)', 'Visibility(mi)', 'Wind_Speed(mph)', 'Precipitation(in)','comp_latitude_1', 'comp_longtitude_1']].corr()
 
@@ -255,10 +237,12 @@ joined_df1 = joined_df1.assign(date_n=joined_df1.apply(get_date, axis=1))
 
 joined_df1 = joined_df1.assign(time_n=joined_df1.apply(get_time, axis=1))
 
-'''εκκρεμεί να μετατραπούν οι ώρες σε λεπτά διαφοράς από τα μεσάνυχτα ώστε να χρησιμοποιηθούν στον υπολογισμό του civil_twilight'''
+joined_df1 = joined_df1.assign(mins_past_midn=joined_df1.apply(count_minutes_past_midnight, axis=1))
+
+joined_df1 = joined_df1.assign(day_of_the_year=joined_df1.apply(day_of_the_year, axis=1))
 
 
-joined_df1['Start_Time'] = pd.to_datetime(joined_df1['Start_Time'],errors='coerce')
+#joined_df1['datetime_n'] = pd.to_datetime(joined_df1['datetime_n'],errors='coerce')
 
 
 
@@ -267,13 +251,13 @@ joined_df1['Start_Time'] = pd.to_datetime(joined_df1['Start_Time'],errors='coerc
 #joined_df1['predicted_Sunrise_Sunset'] = joined_df1.apply(lambda row: calculate_day_night(row) if pd.isna(row['Sunrise_Sunset']) else row['Sunrise_Sunset'], axis=1)
 
 
-
+joined_df1.columns
 # Separate rows with known and unknown day/night values
 known_data = joined_df1.dropna(subset=['Civil_Twilight'])
 unknown_data = joined_df1[joined_df1['Civil_Twilight'].isna()]
 
 # Train a model using known data
-X = known_data[['Start_Lng', 'Start_Lat', 'Timezone', 'Start_Time']]
+X = known_data[['Start_Lng', 'Start_Lat', 'Timezone', 'mins_past_midn', 'day_of_the_year' ]]
 y = known_data['Civil_Twilight']
 
 # Convert categorical data (time_zone) to numerical (One-Hot Encoding)
@@ -284,7 +268,7 @@ model = RandomForestClassifier(n_estimators=100, random_state=42)
 model.fit(X, y)
 X.dtypes
 # Prepare the unknown data
-X_unknown = unknown_data[['Start_Lng', 'Start_Lat', 'Timezone', 'Start_Time']]
+X_unknown = unknown_data[['Start_Lng', 'Start_Lat', 'Timezone', 'mins_past_midn', 'day_of_the_year' ]]
 X_unknown = pd.get_dummies(X_unknown, columns=['Timezone'])
 
 # Make predictions for the missing day/night values
@@ -306,6 +290,45 @@ joined_df1.loc[joined_df1['Civil_Twilight'].isna(), 'Civil_Twilight'] = predicte
 #df_check_1 = df_check_1.reset_index()
 #df_check_1.to_excel(r"C:\Users\Administrator\Desktop\Έγγραφα Μτεαπτυχιακού 2\Σημειώσεις Μεταπρυχιακού\ml\missing values long_lat 1032.xlsx")
 #'''
+
+# Initialize geolocator
+geolocator = Nominatim(user_agent="us_accidents_imputation")
+list_of_errors=[]
+def get_zipcode_from_coords(lat, lon):
+    try:
+        location = geolocator.reverse((lat, lon), language='en')
+        if location and 'address' in location.raw:
+            address = location.raw['address']
+            return address.get('postcode', None)
+        return None
+    except Exception as e:
+        list_of_errors.append(e)
+        print(f"Error for coordinates {lat}, {lon}: {e}")
+        return None
+
+
+
+# Apply the reverse geocoding function to your dataframe
+joined_df1['Zipcode'] = joined_df1.apply(lambda row: get_zipcode_from_coords(row['Start_Lat'], row['Start_Lng']) if pd.isna(row['Zipcode']) else row['Zipcode'], axis=1)
+
+
+mis_zip = joined_df1[pd.isna(joined_df1['Zipcode'])]
+mis_zip['Zipcode'] = mis_zip.apply(lambda row: get_zipcode_from_coords(row['Start_Lat'], row['Start_Lng']) if pd.isna(row['Zipcode']) else row['Zipcode'], axis=1)
+
+
+joined_df1.to_excel(r"C:\Users\Administrator\Desktop\Έγγραφα Μτεαπτυχιακού 2\Σημειώσεις Μεταπρυχιακού\ml\incomplete_dataset.xlsx")
+
+df_to_start = pd.read_excel(r"C:\Users\Administrator\Desktop\Έγγραφα Μτεαπτυχιακού 2\Σημειώσεις Μεταπρυχιακού\ml\incomplete_dataset.xlsx")
+
+#για να αποφευχθεί ο θόρυβος θα γίνει διαγραφή των εγγραφών που δεν καταφέραμε να υπολογίζουμε το zipcode από τις συντεταγμένες
+df_to_start = df_to_start.dropna(subset=['Zipcode'])
+
+df_to_start.info()
+
+mis_City = df_to_start[pd.isna(df_to_start['City'])]
+
+df_to_start['City'] = df_to_start.groupby('Zipcode')['City'].transform(lambda x: x.fillna(x.mode()))
+
 
 
 

@@ -324,10 +324,73 @@ df_to_start = pd.read_excel(r"C:\Users\Administrator\Desktop\Έγγραφα Μτ
 df_to_start = df_to_start.dropna(subset=['Zipcode'])
 
 df_to_start.info()
-
+df_to_start.columns
 mis_City = df_to_start[pd.isna(df_to_start['City'])]
 
-df_to_start['City'] = df_to_start.groupby('Zipcode')['City'].transform(lambda x: x.fillna(x.mode()))
+#df_to_start['City'] = df_to_start.groupby('Zipcode')['City'].transform(lambda x: x.fillna(x.mode()))
+#
+#
+#
+#city,weather_timestamp,timezone  πέταμα
+
+df_to_start['Timezone'] = df_to_start.groupby('County')['Zipcode'].transform(lambda x: x.fillna(x.mode()[0]))
+
+df_to_start['Wind_Direction'] = df_to_start['Wind_Direction'].fillna('Unknown')
+df_to_start['Weather_Condition'] = df_to_start['Weather_Condition'].fillna('Unknown')
+
+
+df_to_start = df_to_start[['ID', 'Source', 'Severity', 'Start_Time',
+       'End_Time', 'Start_Lat', 'Start_Lng', 'Description', 'County',
+       'State', 'Zipcode', 'Country', 'Timezone', 'Wind_Direction', 'Weather_Condition', 'Amenity', 'Bump', 'Crossing',
+       'Give_Way', 'Junction', 'No_Exit', 'Railway', 'Roundabout', 'Station',
+       'Stop', 'Traffic_Calming', 'Traffic_Signal', 'Turning_Loop',
+       'Civil_Twilight', 'comp_latitude_1', 'comp_longtitude_1',
+       'Distance(mi)_n', 'Temperature(F)_n', 'Humidity(%)_n', 'Pressure(in)_n',
+       'Visibility(mi)_n', 'Wind_Speed(mph)_n', 'Precipitation(in)_n',
+       'final_wind_chill', 'datetime_n', 'date_n', 'time_n', 'mins_past_midn',
+       'day_of_the_year']]
+
+df_to_start.to_excel(r"C:\Users\Administrator\Desktop\Έγγραφα Μτεαπτυχιακού 2\Σημειώσεις Μεταπρυχιακού\ml\no_missing_dataset.xlsx")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
